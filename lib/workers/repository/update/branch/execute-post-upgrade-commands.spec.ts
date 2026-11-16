@@ -1312,6 +1312,42 @@ describe('workers/repository/update/branch/execute-post-upgrade-commands', () =>
       expect(res?.artifactErrors).toHaveLength(0);
     });
 
+    it('skips upgrades without a depName for executionMode=branch commands', async () => {
+      const config: BranchConfig = {
+        manager: 'some-manager',
+        updatedPackageFiles: [
+          { type: 'addition', path: 'some-existing-dir', contents: '' },
+        ],
+        upgrades: [
+          { manager: 'some-manager', branchName: 'main', depName: 'some-dep1' },
+          { manager: 'some-manager', branchName: 'main' },
+          { manager: 'some-manager', branchName: 'main', depName: 'some-dep2' },
+        ],
+        postUpgradeTasks: {
+          commands: ['some-command'],
+          fileFilters: ['**/*'],
+          executionMode: 'branch',
+        },
+        branchName: 'main',
+        baseBranch: 'base',
+      };
+      exec.exec.mockResolvedValueOnce({ stdout: 'success', stderr: '' });
+      git.getRepoStatus.mockResolvedValueOnce(
+        partial<StatusResult>({ modified: [], not_added: [], deleted: [] }),
+      );
+      GlobalConfig.set({
+        localDir: upath.join(tmpDir.path, 'local'),
+        allowedCommands: ['some-command'],
+      });
+      fs.localPathIsFile.mockResolvedValueOnce(true);
+
+      await postUpgradeCommands.default(config);
+
+      expect(logger.addMeta).toHaveBeenCalledWith({
+        dep: 'some-dep1 some-dep2',
+      });
+    });
+
     it('does not execute branch-level commands when no upgrade has executionMode=branch', async () => {
       const config: BranchConfig = {
         manager: 'some-manager',
